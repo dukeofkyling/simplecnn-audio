@@ -1,0 +1,22 @@
+streamlit
+torch
+torchvision
+pillow
+numpy
+
+# === GENERATE DOWNLOAD LINKS ===
+from IPython.display import HTML
+import base64
+
+def link(f):
+    path = f"/kaggle/working/{f}"
+    with open(path, "rb") as file:
+        b64 = base64.b64encode(file.read()).decode()
+    return f'<a href="data:application/octet-stream;base64,{b64}" download="{f}">Download {f}</a>'
+
+html = "<br>".join([
+    link("model.pth"),
+    link("app.py"),
+    link("requirements.txt")
+])
+HTML(html)
