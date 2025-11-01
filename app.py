@@ -4,9 +4,13 @@ import torch.nn as nn
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
+import librosa
+import librosa.display
+import matplotlib.pyplot as plt
+import io
 
 # ============================================================
-# ✅ MODEL CLASS (MATCHING TRAINING VERSION)
+# ✅ MODEL CLASS
 # ============================================================
 class SimpleCNN(nn.Module):
     def __init__(self, n_classes=2, in_ch=1):
@@ -44,8 +48,22 @@ def load_model():
 model = load_model()
 
 # ============================================================
-# ✅ IMAGE PREPROCESSING PIPELINE
+# ✅ AUDIO FILE UPLOAD AND MEL SPECTROGRAM CONVERSION
 # ============================================================
+def audio_to_mel_image(audio_bytes):
+    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128)
+    mel_db = librosa.power_to_db(mel, ref=np.max)
+
+    fig, ax = plt.subplots(figsize=(2, 2))
+    librosa.display.specshow(mel_db, sr=sr, x_axis=None, y_axis=None, ax=ax, cmap="gray_r")
+    plt.axis("off")
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    return Image.open(buf)
+
 transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.Grayscale(num_output_channels=1),
@@ -54,27 +72,30 @@ transform = transforms.Compose([
 ])
 
 # ============================================================
-# ✅ STREAMLIT APP UI
+# ✅ STREAMLIT UI
 # ============================================================
-st.title("🎵 SimpleCNN Mel Spectrogram Classifier")
-st.write("Upload a **mel spectrogram image** (128×128, grayscale) to predict its class.")
+st.title("🎧 SimpleCNN Audio Classifier (Mel Spectrograms)")
+st.write("Upload a **.wav** file — it will be converted into a mel spectrogram automatically.")
 
-uploaded_file = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3"])
 
 if uploaded_file is not None:
-    img = Image.open(uploaded_file)
-    st.image(img, caption="Uploaded Mel Spectrogram", use_column_width=True)
+    audio_bytes = uploaded_file.read()
+    st.audio(audio_bytes, format="audio/wav")
 
-    # Preprocess image
-    input_tensor = transform(img).unsqueeze(0)
+    # Convert to mel spectrogram
+    mel_img = audio_to_mel_image(audio_bytes)
+    st.image(mel_img, caption="Generated Mel Spectrogram", use_column_width=True)
 
-    # Make prediction
+    # Preprocess for model
+    input_tensor = transform(mel_img).unsqueeze(0)
+
+    # Predict
     with torch.no_grad():
         output = model(input_tensor)
         probs = torch.softmax(output, dim=1)[0].cpu().numpy()
         pred = int(probs.argmax())
 
-    # Display results
     st.success(f"**Prediction: Class {pred}**")
     st.write(f"**Confidence: {probs[pred]:.1%}**")
 
@@ -82,7 +103,4 @@ if uploaded_file is not None:
     class_names = [f"Class {i}" for i in range(len(probs))]
     st.bar_chart(dict(zip(class_names, probs)))
 
-# ============================================================
-# ✅ FOOTER
-# ============================================================
-st.caption("Model: SimpleCNN | Framework: PyTorch | App powered by Streamlit 🚀")
+st.caption("Model: SimpleCNN | Trained on Mel Spectrograms | App powered by Streamlit 🚀")
